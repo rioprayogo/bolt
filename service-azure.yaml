@@ -1,0 +1,57 @@
+apiVersion: bolt/v1
+kind: Service
+metadata:
+  name: example-azure-service
+  owner: yourname
+  tags:
+    environment: "local"  # Ganti ke "production" untuk Azure asli
+    project: "bolt-demo"
+providers:
+  - name: azure_local  # Ganti ke "azure_prod" untuk production
+    type: azurerm
+    spec:
+      region: eastus
+      environment: local  # Ganti ke "production" untuk Azure asli
+      # Untuk production, login dengan: az login
+      # Atau gunakan service principal: az login --service-principal
+
+spec:
+  infrastructure:
+    # Gunakan key pair yang sudah ada (Azure: SSH public key sudah di-upload manual)
+    # Untuk production, upload SSH public key ke Azure: az sshkey create
+    key_pair:
+      name: "my-existing-key"
+    networks:
+      - name: vnet-main
+        provider: azure_local  # Ganti ke "azure_prod" untuk production
+        cidr: 10.20.0.0/16
+        subnets:
+          - name: subnet-main
+            zone: eastus
+            cidr: 10.20.1.0/24
+    security_groups:
+      - name: web-nsg
+        provider: azure_local  # Ganti ke "azure_prod" untuk production
+        vpc: vnet-main
+        rules:
+          - type: ingress
+            protocol: Tcp
+            from_port: 22
+            to_port: 22
+            cidr_blocks: ["0.0.0.0/0"]
+    computes:
+      - name: web-vm
+        type: azurerm_linux_virtual_machine
+        provider: azure_local  # Ganti ke "azure_prod" untuk production
+        vpc: vnet-main
+        subnet: subnet-main
+        security_group: web-nsg
+        spec:
+          size: Standard_B1s
+          username: "azureuser"
+          # password: "StrongPassword123!" # atau gunakan SSH key
+          image:
+            publisher: "Canonical"
+            offer: "0001-com-ubuntu-server-jammy"
+            sku: "22_04-lts-gen2"
+          os_disk_size_gb: 30 

@@ -1,0 +1,48 @@
+apiVersion: bolt/v1
+kind: Service
+metadata:
+  name: example-aws-service
+  owner: yourname
+  tags:
+    environment: "local"
+    project: "bolt-demo"
+providers:
+  - name: aws_local
+    type: aws
+    spec:
+      region: us-east-1
+      environment: local # Ganti ke 'production' untuk AWS asli
+
+spec:
+  infrastructure:
+    key_pair:
+      name: "my-existing-key"
+    networks:
+      - name: vpc-main
+        provider: aws_local
+        cidr: 10.10.0.0/16
+        subnets:
+          - name: subnet-public
+            zone: us-east-1a
+            cidr: 10.10.1.0/24
+    security_groups:
+      - name: web-sg
+        provider: aws_local
+        vpc: vpc-main
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            cidr_blocks: ["0.0.0.0/0"]
+    computes:
+      - name: web-vm
+        type: ec2
+        provider: aws_local
+        vpc: vpc-main
+        subnet: subnet-public
+        security_group: web-sg
+        spec:
+          instance_type: t3.micro
+          root_disk_size_gb: 20
+# Untuk production, ganti 'environment' dan 'name' provider ke yang sesuai akun AWS Anda

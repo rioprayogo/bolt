@@ -1,0 +1,51 @@
+apiVersion: bolt/v1
+kind: Service
+metadata:
+  name: example-gcp-service
+  owner: yourname
+  tags:
+    environment: "local"
+    project: "bolt-demo"
+providers:
+  - name: gcp_local
+    type: google
+    spec:
+      project: "your-gcp-project-id"
+      region: us-central1
+      environment: local
+
+spec:
+  infrastructure:
+    # Gunakan key pair yang sudah ada (GCP: SSH key di metadata project/user)
+    key_pair:
+      name: "my-existing-key"
+    networks:
+      - name: vpc-main
+        provider: gcp_local
+        cidr: 10.30.0.0/16
+        subnets:
+          - name: subnet-main
+            zone: us-central1-a
+            cidr: 10.30.1.0/24
+    security_groups:
+      - name: web-fw
+        provider: gcp_local
+        vpc: vpc-main
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            cidr_blocks: ["0.0.0.0/0"]
+    computes:
+      - name: web-vm
+        type: google_compute_instance
+        provider: gcp_local
+        vpc: vpc-main
+        subnet: subnet-main
+        security_group: web-fw
+        spec:
+          machine_type: e2-medium
+          zone: us-central1-a
+          image: "debian-cloud/debian-11"
+          disk_size_gb: 20 

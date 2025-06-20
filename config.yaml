@@ -1,0 +1,28 @@
+# Bolt Configuration File
+# This file contains default settings for the Bolt infrastructure tool
+
+defaults:
+  region: "us-east-1"
+  environment: "local"
+  project: "bolt"
+
+providers:
+  aws:
+    localstack_url: "http://localhost:4566"
+    default_region: "us-east-1"
+  azure:
+    default_region: "eastus"
+    default_subscription: ""
+  gcp:
+    default_project: ""
+    default_region: "us-central1"
+
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+security:
+  require_confirmation: true
+  max_retries: 3
+  timeout_seconds: 300 
