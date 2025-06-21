@@ -70,6 +70,16 @@ func CompileToTofu(service *parser.Service, boltBuildPath string) error {
 		}
 	}
 
+	kubernetesResources := processKubernetesResources(service)
+	for resourceType, resourceMap := range kubernetesResources {
+		if resources[resourceType] == nil {
+			resources[resourceType] = make(map[string]interface{})
+		}
+		for resourceName, resourceConfig := range resourceMap.(map[string]interface{}) {
+			resources[resourceType].(map[string]interface{})[resourceName] = resourceConfig
+		}
+	}
+
 	config := map[string]interface{}{
 		"terraform": map[string]interface{}{
 			"required_providers": map[string]interface{}{
@@ -170,13 +180,20 @@ func processAWSResources(service *parser.Service, provider parser.Provider) map[
 
 			for _, rule := range sg.Rules {
 				ruleConfig := map[string]interface{}{
-					"protocol":  rule.Protocol,
-					"from_port": rule.FromPort,
-					"to_port":   rule.ToPort,
+					"protocol":         rule.Protocol,
+					"from_port":        rule.FromPort,
+					"to_port":          rule.ToPort,
+					"description":      "",
+					"ipv6_cidr_blocks": []string{},
+					"prefix_list_ids":  []string{},
+					"security_groups":  []string{},
+					"self":             false,
 				}
 
 				if len(rule.CIDRBlocks) > 0 {
 					ruleConfig["cidr_blocks"] = rule.CIDRBlocks
+				} else {
+					ruleConfig["cidr_blocks"] = []string{"0.0.0.0/0"}
 				}
 
 				if rule.Type == "ingress" {
@@ -256,12 +273,72 @@ func processAzureResources(service *parser.Service, provider parser.Provider) ma
 				if azureResources["azurerm_subnet"] == nil {
 					azureResources["azurerm_subnet"] = make(map[string]interface{})
 				}
-				azureResources["azurerm_subnet"].(map[string]interface{})[subnetName] = map[string]interface{}{
+
+				subnetConfig := map[string]interface{}{
 					"name":                 subnetName,
 					"resource_group_name":  "rg-" + vnetName,
 					"virtual_network_name": vnetName,
 					"address_prefixes":     []string{subnet.CIDR},
 				}
+
+				azureResources["azurerm_subnet"].(map[string]interface{})[subnetName] = subnetConfig
+			}
+		}
+	}
+
+	for _, sg := range service.Spec.Infrastructure.SecurityGroups {
+		if sg.Provider == provider.Name {
+			sgName := sg.Name
+			if azureResources["azurerm_network_security_group"] == nil {
+				azureResources["azurerm_network_security_group"] = make(map[string]interface{})
+			}
+
+			azureResources["azurerm_network_security_group"].(map[string]interface{})[sgName] = map[string]interface{}{
+				"name":                sgName,
+				"resource_group_name": "rg-" + sg.VPC,
+				"location":            getProviderRegion(provider),
+				"tags":                mergeTags(service.Metadata.Tags, map[string]string{"Name": sgName}),
+			}
+
+			if azureResources["azurerm_network_security_rule"] == nil {
+				azureResources["azurerm_network_security_rule"] = make(map[string]interface{})
+			}
+
+			for i, rule := range sg.Rules {
+				ruleName := fmt.Sprintf("%s-rule-%d", sgName, i)
+				ruleConfig := map[string]interface{}{
+					"name":                        ruleName,
+					"resource_group_name":         "rg-" + sg.VPC,
+					"network_security_group_name": sgName,
+					"priority":                    100 + i,
+					"access":                      "Allow",
+					"source_port_range":           "*",
+					"destination_port_range":      fmt.Sprintf("%d-%d", rule.FromPort, rule.ToPort),
+				}
+
+				if rule.Type == "ingress" {
+					ruleConfig["direction"] = "Inbound"
+				} else {
+					ruleConfig["direction"] = "Outbound"
+				}
+
+				if rule.Protocol == "tcp" {
+					ruleConfig["protocol"] = "Tcp"
+				} else if rule.Protocol == "udp" {
+					ruleConfig["protocol"] = "Udp"
+				} else {
+					ruleConfig["protocol"] = "*"
+				}
+
+				if len(rule.CIDRBlocks) > 0 {
+					ruleConfig["source_address_prefix"] = rule.CIDRBlocks[0]
+				} else {
+					ruleConfig["source_address_prefix"] = "*"
+				}
+
+				ruleConfig["destination_address_prefix"] = "*"
+
+				azureResources["azurerm_network_security_rule"].(map[string]interface{})[ruleName] = ruleConfig
 			}
 		}
 	}
@@ -276,6 +353,12 @@ func processAzureResources(service *parser.Service, provider parser.Provider) ma
 				"size":                "Standard_B1s",
 				"admin_username":      "boltadmin",
 				"tags":                mergeTags(service.Metadata.Tags, map[string]string{"Name": vmName}),
+				"source_image_reference": map[string]interface{}{
+					"publisher": "Canonical",
+					"offer":     "UbuntuServer",
+					"sku":       "18.04-LTS",
+					"version":   "latest",
+				},
 			}
 
 			if size, ok := compute.Spec["size"].(string); ok {
@@ -312,12 +395,19 @@ func processAzureResources(service *parser.Service, provider parser.Provider) ma
 			if azureResources["azurerm_network_interface"] == nil {
 				azureResources["azurerm_network_interface"] = make(map[string]interface{})
 			}
-			azureResources["azurerm_network_interface"].(map[string]interface{})[vmName+"-nic"] = map[string]interface{}{
+
+			nicConfig := map[string]interface{}{
 				"name":                vmName + "-nic",
 				"resource_group_name": "rg-" + compute.VPC,
 				"location":            getProviderRegion(provider),
-				"subnet_id":           fmt.Sprintf("${azurerm_subnet.%s.id}", compute.Subnet),
+				"ip_configuration": []map[string]interface{}{{
+					"name":                          "internal",
+					"subnet_id":                     fmt.Sprintf("${azurerm_subnet.%s.id}", compute.Subnet),
+					"private_ip_address_allocation": "Dynamic",
+				}},
 			}
+
+			azureResources["azurerm_network_interface"].(map[string]interface{})[vmName+"-nic"] = nicConfig
 		}
 	}
 
@@ -353,6 +443,46 @@ func processGCPResources(service *parser.Service, provider parser.Provider) map[
 		}
 	}
 
+	for _, sg := range service.Spec.Infrastructure.SecurityGroups {
+		if sg.Provider == provider.Name {
+			sgName := sg.Name
+			if gcpResources["google_compute_firewall"] == nil {
+				gcpResources["google_compute_firewall"] = make(map[string]interface{})
+			}
+
+			for i, rule := range sg.Rules {
+				ruleName := fmt.Sprintf("%s-rule-%d", sgName, i)
+				ruleConfig := map[string]interface{}{
+					"name":    ruleName,
+					"network": fmt.Sprintf("${google_compute_network.%s.self_link}", sg.VPC),
+				}
+
+				if rule.Type == "ingress" {
+					ruleConfig["direction"] = "INGRESS"
+					ruleConfig["source_ranges"] = rule.CIDRBlocks
+					ruleConfig["target_tags"] = []string{sgName}
+				} else {
+					ruleConfig["direction"] = "EGRESS"
+					ruleConfig["destination_ranges"] = rule.CIDRBlocks
+					ruleConfig["target_tags"] = []string{sgName}
+				}
+
+				if rule.Protocol == "tcp" || rule.Protocol == "udp" {
+					ruleConfig["allow"] = []map[string]interface{}{{
+						"protocol": rule.Protocol,
+						"ports":    []string{fmt.Sprintf("%d-%d", rule.FromPort, rule.ToPort)},
+					}}
+				} else {
+					ruleConfig["allow"] = []map[string]interface{}{{
+						"protocol": rule.Protocol,
+					}}
+				}
+
+				gcpResources["google_compute_firewall"].(map[string]interface{})[ruleName] = ruleConfig
+			}
+		}
+	}
+
 	for _, compute := range service.Spec.Infrastructure.Computes {
 		if compute.Provider == provider.Name && compute.Type == "google_compute_instance" {
 			vmName := compute.Name
@@ -360,6 +490,12 @@ func processGCPResources(service *parser.Service, provider parser.Provider) map[
 				"name":         vmName,
 				"machine_type": "e2-medium",
 				"zone":         getProviderZone(provider),
+				"boot_disk": []map[string]interface{}{{
+					"initialize_params": []map[string]interface{}{{
+						"image": "debian-cloud/debian-11",
+						"size":  20,
+					}},
+				}},
 			}
 
 			if machineType, ok := compute.Spec["machine_type"].(string); ok {
@@ -377,9 +513,18 @@ func processGCPResources(service *parser.Service, provider parser.Provider) map[
 				}}
 			}
 
-			vm["network_interface"] = []map[string]interface{}{{
+			networkInterface := map[string]interface{}{
 				"subnetwork": fmt.Sprintf("${google_compute_subnetwork.%s.self_link}", compute.Subnet),
-			}}
+			}
+
+			if compute.SecurityGroup != "" {
+				networkInterface["access_config"] = []map[string]interface{}{{
+					"network_tier": "STANDARD",
+				}}
+				vm["tags"] = []string{compute.SecurityGroup}
+			}
+
+			vm["network_interface"] = []map[string]interface{}{networkInterface}
 
 			if gcpResources["google_compute_instance"] == nil {
 				gcpResources["google_compute_instance"] = make(map[string]interface{})
@@ -418,10 +563,8 @@ func generateAWSProviderConfig(provider parser.Provider) map[string]interface{} 
 }
 
 func generateAzureProviderConfig(provider parser.Provider) map[string]interface{} {
-	config := map[string]interface{}{}
-
-	if region, ok := provider.Spec["region"].(string); ok {
-		config["region"] = region
+	config := map[string]interface{}{
+		"features": map[string]interface{}{},
 	}
 
 	return config
@@ -475,7 +618,191 @@ func mergeTags(globalTags, resourceTags map[string]string) map[string]string {
 func writeToFile(config map[string]interface{}, path string) error {
 	bytes, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal config to JSON: %w", err)
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 	return os.WriteFile(path, bytes, 0644)
+}
+
+func processKubernetesResources(service *parser.Service) map[string]interface{} {
+	kubernetesResources := make(map[string]interface{})
+
+	for _, cluster := range service.Spec.Infrastructure.KubernetesClusters {
+		switch cluster.Provider {
+		case "aws", "aws_local":
+			processEKSCluster(cluster, kubernetesResources)
+		case "azurerm", "azurerm_local":
+			processAKSCluster(cluster, kubernetesResources)
+		case "google", "google_local":
+			processGKECluster(cluster, kubernetesResources)
+		}
+	}
+
+	return kubernetesResources
+}
+
+func processEKSCluster(cluster parser.KubernetesCluster, resources map[string]interface{}) {
+	clusterName := cluster.Name
+	vpcName := cluster.VPC
+
+	version := getStringSpec(cluster.Spec, "version", "1.28")
+	nodeType := getStringSpec(cluster.Spec, "node_type", "t3.medium")
+	nodeCount := getIntSpec(cluster.Spec, "node_count", 2)
+	nodeDiskSize := getIntSpec(cluster.Spec, "node_disk_size_gb", 20)
+
+	if resources["aws_eks_cluster"] == nil {
+		resources["aws_eks_cluster"] = make(map[string]interface{})
+	}
+
+	resources["aws_eks_cluster"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"name":     clusterName,
+		"role_arn": fmt.Sprintf("${aws_iam_role.%s_cluster_role.arn}", clusterName),
+		"version":  version,
+		"vpc_config": map[string]interface{}{
+			"subnet_ids": []string{
+				fmt.Sprintf("${aws_subnet.%s_public.id}", vpcName),
+				fmt.Sprintf("${aws_subnet.%s_private.id}", vpcName),
+			},
+			"endpoint_private_access": true,
+			"endpoint_public_access":  true,
+		},
+		"depends_on": []string{
+			fmt.Sprintf("aws_iam_role_policy_attachment.%s_cluster_policy", clusterName),
+			fmt.Sprintf("aws_iam_role_policy_attachment.%s_vpc_resource_controller", clusterName),
+		},
+		"tags": map[string]string{
+			"Name": clusterName,
+		},
+	}
+
+	if resources["aws_eks_node_group"] == nil {
+		resources["aws_eks_node_group"] = make(map[string]interface{})
+	}
+
+	resources["aws_eks_node_group"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"cluster_name":    fmt.Sprintf("${aws_eks_cluster.%s.name}", clusterName),
+		"node_group_name": fmt.Sprintf("%s-nodes", clusterName),
+		"node_role_arn":   fmt.Sprintf("${aws_iam_role.%s_node_role.arn}", clusterName),
+		"subnet_ids":      []string{fmt.Sprintf("${aws_subnet.%s_private.id}", vpcName)},
+		"instance_types":  []string{nodeType},
+		"scaling_config": map[string]interface{}{
+			"desired_size": nodeCount,
+			"max_size":     nodeCount,
+			"min_size":     1,
+		},
+		"disk_size": nodeDiskSize,
+		"depends_on": []string{
+			fmt.Sprintf("aws_iam_role_policy_attachment.%s_worker_node_policy", clusterName),
+			fmt.Sprintf("aws_iam_role_policy_attachment.%s_cni_policy", clusterName),
+			fmt.Sprintf("aws_iam_role_policy_attachment.%s_ecr_read_only", clusterName),
+		},
+		"tags": map[string]string{
+			"Name": fmt.Sprintf("%s-nodes", clusterName),
+		},
+	}
+}
+
+func processAKSCluster(cluster parser.KubernetesCluster, resources map[string]interface{}) {
+	clusterName := cluster.Name
+	nodeCount := getIntSpec(cluster.Spec, "node_count", 2)
+	nodeSize := getStringSpec(cluster.Spec, "node_size", "Standard_B2s")
+
+	if resources["azurerm_kubernetes_cluster"] == nil {
+		resources["azurerm_kubernetes_cluster"] = make(map[string]interface{})
+	}
+
+	resources["azurerm_kubernetes_cluster"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"name":                clusterName,
+		"location":            fmt.Sprintf("${azurerm_resource_group.%s.location}", clusterName),
+		"resource_group_name": fmt.Sprintf("${azurerm_resource_group.%s.name}", clusterName),
+		"dns_prefix":          clusterName,
+		"default_node_pool": map[string]interface{}{
+			"name":       "default",
+			"node_count": nodeCount,
+			"vm_size":    nodeSize,
+		},
+		"identity": map[string]interface{}{
+			"type": "SystemAssigned",
+		},
+		"network_profile": map[string]interface{}{
+			"network_plugin": "azure",
+			"network_policy": "azure",
+		},
+		"tags": map[string]string{
+			"Name": clusterName,
+		},
+	}
+
+	if resources["azurerm_resource_group"] == nil {
+		resources["azurerm_resource_group"] = make(map[string]interface{})
+	}
+
+	resources["azurerm_resource_group"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"name":     fmt.Sprintf("%s-rg", clusterName),
+		"location": "eastus",
+	}
+}
+
+func processGKECluster(cluster parser.KubernetesCluster, resources map[string]interface{}) {
+	clusterName := cluster.Name
+	vpcName := cluster.VPC
+	nodeCount := getIntSpec(cluster.Spec, "node_count", 2)
+	machineType := getStringSpec(cluster.Spec, "machine_type", "e2-medium")
+
+	if resources["google_container_cluster"] == nil {
+		resources["google_container_cluster"] = make(map[string]interface{})
+	}
+
+	resources["google_container_cluster"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"name":                     clusterName,
+		"location":                 "us-central1",
+		"remove_default_node_pool": true,
+		"initial_node_count":       1,
+		"network":                  fmt.Sprintf("${google_compute_network.%s.name}", vpcName),
+		"subnetwork":               fmt.Sprintf("${google_compute_subnetwork.subnet-private-1a.name}", vpcName),
+		"ip_allocation_policy": map[string]interface{}{
+			"cluster_ipv4_cidr_block":  "/16",
+			"services_ipv4_cidr_block": "/22",
+		},
+		"private_cluster_config": map[string]interface{}{
+			"enable_private_nodes":    true,
+			"enable_private_endpoint": false,
+			"master_ipv4_cidr_block":  "172.16.0.0/28",
+		},
+	}
+
+	if resources["google_container_node_pool"] == nil {
+		resources["google_container_node_pool"] = make(map[string]interface{})
+	}
+
+	resources["google_container_node_pool"].(map[string]interface{})[clusterName] = map[string]interface{}{
+		"name":       fmt.Sprintf("%s-node-pool", clusterName),
+		"location":   fmt.Sprintf("${google_container_cluster.%s.location}", clusterName),
+		"cluster":    fmt.Sprintf("${google_container_cluster.%s.name}", clusterName),
+		"node_count": nodeCount,
+		"node_config": map[string]interface{}{
+			"machine_type": machineType,
+			"disk_size_gb": 20,
+			"oauth_scopes": []string{
+				"https://www.googleapis.com/auth/logging.write",
+				"https://www.googleapis.com/auth/monitoring",
+			},
+			"metadata": map[string]string{
+				"disable-legacy-endpoints": "true",
+			},
+		},
+	}
+}
+
+func getStringSpec(spec map[string]interface{}, key, defaultValue string) string {
+	if value, ok := spec[key].(string); ok {
+		return value
+	}
+	return defaultValue
+}
+
+func getIntSpec(spec map[string]interface{}, key string, defaultValue int) int {
+	if value, ok := spec[key].(int); ok {
+		return value
+	}
+	return defaultValue
 }

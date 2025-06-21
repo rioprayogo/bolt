@@ -99,13 +99,6 @@ func Run(manifestFile string, action string) error {
 			}
 		}
 	} else if action == "apply" {
-		if cfg.Security.RequireConfirmation {
-			if !confirmAction("apply") {
-				logger.Info("Apply cancelled by user", logger.Fields{})
-				return nil
-			}
-		}
-
 		if err := tofuEngine.Plan(); err != nil {
 			logger.LogError(err, "OpenTofu plan before apply", logger.Fields{
 				"work_dir": compileDir,
@@ -114,6 +107,13 @@ func Run(manifestFile string, action string) error {
 				Command:  "tofu plan",
 				Output:   err.Error(),
 				ExitCode: 1,
+			}
+		}
+
+		if cfg.Security.RequireConfirmation {
+			if !confirmAction("apply") {
+				logger.Info("Apply cancelled by user", logger.Fields{})
+				return nil
 			}
 		}
 

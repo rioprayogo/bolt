@@ -1,0 +1,16 @@
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=filled];
+
+    // Node definitions
+    aws_local_vpc-main [label="vpc-main\n(network)", fillcolor="lightblue"];
+    aws_local_subnet-public [label="subnet-public\n(subnet)", fillcolor="lightgreen"];
+    aws_local_web-sg [label="web-sg\n(security_group)", fillcolor="lightyellow"];
+    aws_local_web-vm [label="web-vm\n(compute)", fillcolor="lightcoral"];
+
+    // Edges
+    aws_local_subnet-public -> aws_local_web-vm;
+    aws_local_web-sg -> aws_local_web-vm;
+    aws_local_vpc-main -> aws_local_subnet-public;
+    aws_local_vpc-main -> aws_local_web-sg;
+}

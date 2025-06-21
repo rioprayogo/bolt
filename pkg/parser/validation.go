@@ -113,10 +113,10 @@ func validateProvider(provider Provider, path string, result *ValidationResult) 
 }
 
 func validateSpec(spec Spec, result *ValidationResult) {
-	// Validate key pair
-	validateKeyPair(spec.KeyPair, "spec.key_pair", result)
+	if spec.KeyPair.Name != "" {
+		validateKeyPair(spec.KeyPair, "spec.key_pair", result)
+	}
 
-	// Validate infrastructure
 	validateInfrastructure(spec.Infrastructure, "spec.infrastructure", result)
 }
 
@@ -126,8 +126,23 @@ func validateKeyPair(keyPair KeyPair, path string, result *ValidationResult) {
 	}
 
 	if keyPair.PublicKeyFile != "" {
-		if _, err := os.Stat(keyPair.PublicKeyFile); os.IsNotExist(err) {
-			result.AddError(path+".public_key_file", fmt.Sprintf("public key file not found: %s", keyPair.PublicKeyFile))
+		filePath := keyPair.PublicKeyFile
+
+		if strings.HasPrefix(filePath, "~/") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				result.AddError(path+".public_key_file", "cannot determine home directory")
+				return
+			}
+			filePath = strings.Replace(filePath, "~", homeDir, 1)
+		}
+
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			if keyPair.UseExisting {
+				result.AddError(path+".public_key_file", fmt.Sprintf("existing public key file not found: %s", filePath))
+			} else {
+				result.AddError(path+".public_key_file", fmt.Sprintf("public key file not found: %s", filePath))
+			}
 		}
 	}
 }

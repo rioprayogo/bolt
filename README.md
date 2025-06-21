@@ -1,92 +1,427 @@
-# Bolt - Multi-Cloud Infrastructure as Code Tool
+# 🚀 Bolt - Multi-Cloud Infrastructure as Code
 
-Bolt adalah tool untuk merakit infrastruktur dari definisi layanan abstrak menggunakan OpenTofu. Mendukung AWS, Azure, dan GCP dengan struktur YAML yang konsisten dan sangat fleksibel.
+Bolt is a powerful Infrastructure as Code (IaC) tool that supports AWS, Azure, and GCP with a simple YAML configuration. Built with Go and OpenTofu, it provides a unified interface for managing multi-cloud infrastructure including Kubernetes clusters.
 
-## 🚀 Fitur Utama
+## ✨ Features
 
-- **Multi-Provider Support**: AWS, Azure, GCP
-- **Abstraksi Layanan**: Definisikan infrastruktur dalam YAML sederhana
-- **Fleksibel**: Bisa hanya VM, hanya network, atau full stack
-- **Key Pair Existing**: Bisa pakai key pair yang sudah ada
-- **LocalStack Integration**: Testing lokal untuk AWS
-- **Production Ready**: Siap untuk deployment production
-- **Struktur YAML Konsisten**: Migrasi antar provider sangat mudah
+- **Multi-Cloud Support**: AWS, Azure, and GCP
+- **Kubernetes Clusters**: EKS, AKS, and GKE support
+- **Simple YAML Configuration**: Easy-to-read infrastructure definitions
+- **Local Testing**: Test with LocalStack (AWS) and dev environments
+- **Dependency Graph**: Visualize resource dependencies
+- **Cost Estimation**: Get cost estimates before deployment
+- **Flexible Key Management**: Use existing keys or generate new ones
+- **Production Ready**: Built with Go for reliability and performance
 
-## 📋 Prerequisites
+## 🚀 Quick Start
 
-### Untuk AWS (LocalStack):
-```bash
-brew install awscli localstack opentofu
-yarn global add aws-cdk-local
-localstack start
-aws configure # (isi dengan dummy credentials untuk local)
-```
+### Prerequisites
 
-### Untuk Azure:
-```bash
-brew install azure-cli opentofu
-az login
-```
+- Go 1.21+
+- OpenTofu
+- LocalStack (for local AWS testing)
+- Cloud provider credentials (for production)
 
-### Untuk GCP:
-```bash
-brew install google-cloud-sdk opentofu
-# Login dan set project
-gcloud auth application-default login
-gcloud config set project YOUR_PROJECT_ID
-```
-
-## 🏗️ Instalasi
+### Installation
 
 ```bash
-# Clone repository
-git clone <repository-url>
+git clone <repository>
 cd bold
-
-# Build binary
-go build -o bolt main.go
-
-# Test instalasi
-./bolt --help
+go build -o bold .
 ```
 
-## 📝 Contoh YAML Infrastruktur
+### Basic Usage
 
-### 1. **AWS - Minimal, Key Pair Existing, Hanya VM (Local Testing)**
+```bash
+# Analyze infrastructure
+./bold analyze service.yaml
+
+# Bootstrap infrastructure
+./bold bootstrap service.yaml
+
+# Destroy infrastructure
+./bold destroy service.yaml
+```
+
+## 📋 Configuration Reference
+
+### Service Manifest Structure
+
 ```yaml
 apiVersion: bolt/v1
 kind: Service
 metadata:
-  name: example-aws-service
+  name: my-service
   owner: yourname
   tags:
-    environment: "local"  # Ganti ke "production" untuk AWS asli
-    project: "bolt-demo"
+    environment: "local"
+    project: "my-project"
+
 providers:
-  - name: aws_local  # Ganti ke "aws_prod" untuk production
+  - name: aws_local
     type: aws
     spec:
       region: us-east-1
-      environment: local  # Ganti ke "production" untuk AWS asli
-      # Untuk production, tambahkan credentials di environment variables:
-      # export AWS_ACCESS_KEY_ID="your-access-key"
-      # export AWS_SECRET_ACCESS_KEY="your-secret-key"
+      environment: local
 
 spec:
+  key_pair:
+    name: "my-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+  
   infrastructure:
-    key_pair:
-      name: "my-existing-key" # Key pair sudah ada di AWS
+    networks: []
+    security_groups: []
+    kubernetes_clusters: []
+    computes: []
+```
+
+## 🔑 Key Pair Configuration
+
+Bolt supports three key pair configurations:
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| **No Key Pair** | Skip key pair entirely | Omit `key_pair` section |
+| **Use Existing** | Use local SSH key | `use_existing: true` |
+| **Generate New** | Create new key pair | `public_key_file: "./bolt-key.pub"` |
+
+### Key Pair Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Key pair name | `"my-key"` |
+| `public_key_file` | string | Yes* | Path to public key file | `"~/.ssh/id_rsa.pub"` |
+| `use_existing` | boolean | No | Use existing local key | `true` |
+
+*Required unless `use_existing: true`
+
+### Key Pair Examples
+
+#### 1. No Key Pair (Optional)
+```yaml
+spec:
+  infrastructure:
+    # ... resources without key_pair
+```
+
+#### 2. Use Existing Local SSH Key
+```yaml
+spec:
+  key_pair:
+    name: "local-ssh-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+```
+
+#### 3. Generate New Key Pair
+```yaml
+spec:
+  key_pair:
+    name: "bolt-key"
+    public_key_file: "./bolt-key.pub"
+```
+
+## 🌐 Network Configuration
+
+### Network Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Network name | `"vpc-main"` |
+| `provider` | string | Yes | Cloud provider | `"aws_local"` |
+| `cidr` | string | Yes | Network CIDR | `"10.10.0.0/16"` |
+| `subnets` | array | No | Subnet list | See below |
+
+### Subnet Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Subnet name | `"subnet-public"` |
+| `zone` | string | Yes | Availability zone | `"us-east-1a"` |
+| `cidr` | string | Yes | Subnet CIDR | `"10.10.1.0/24"` |
+
+### Network Examples
+
+#### Multi-Zone Network
+```yaml
+networks:
+  - name: vpc-main
+    provider: aws_local
+    cidr: 10.10.0.0/16
+    subnets:
+      - name: subnet-public-1a
+        zone: us-east-1a
+        cidr: 10.10.1.0/24
+      - name: subnet-public-1b
+        zone: us-east-1b
+        cidr: 10.10.2.0/24
+      - name: subnet-private-1a
+        zone: us-east-1a
+        cidr: 10.10.3.0/24
+      - name: subnet-private-1b
+        zone: us-east-1b
+        cidr: 10.10.4.0/24
+```
+
+## 🔒 Security Group Configuration
+
+### Security Group Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Security group name | `"web-sg"` |
+| `provider` | string | Yes | Cloud provider | `"aws_local"` |
+| `vpc` | string | Yes | VPC name | `"vpc-main"` |
+| `rules` | array | Yes | Security rules | See below |
+
+### Security Rule Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `type` | string | Yes | Rule type | `"ingress"` or `"egress"` |
+| `protocol` | string | Yes | Protocol | `"tcp"`, `"udp"`, `"-1"` |
+| `from_port` | integer | Yes | Start port | `22` |
+| `to_port` | integer | Yes | End port | `22` |
+| `cidr_blocks` | array | No* | CIDR blocks | `["0.0.0.0/0"]` |
+| `source_vpc` | string | No* | Source VPC | `"vpc-main"` |
+
+*Required one of `cidr_blocks` or `source_vpc`
+
+### Security Group Examples
+
+#### Web Server Security Group
+```yaml
+security_groups:
+  - name: web-sg
+    provider: aws_local
+    vpc: vpc-main
+    rules:
+      - type: ingress
+        protocol: tcp
+        from_port: 22
+        to_port: 22
+        cidr_blocks: ["0.0.0.0/0"]
+      - type: ingress
+        protocol: tcp
+        from_port: 80
+        to_port: 80
+        cidr_blocks: ["0.0.0.0/0"]
+      - type: ingress
+        protocol: tcp
+        from_port: 443
+        to_port: 443
+        cidr_blocks: ["0.0.0.0/0"]
+      - type: egress
+        protocol: -1
+        from_port: 0
+        to_port: 0
+        cidr_blocks: ["0.0.0.0/0"]
+```
+
+#### Application Security Group
+```yaml
+security_groups:
+  - name: app-sg
+    provider: aws_local
+    vpc: vpc-main
+    rules:
+      - type: ingress
+        protocol: tcp
+        from_port: 22
+        to_port: 22
+        source_vpc: vpc-main
+      - type: ingress
+        protocol: tcp
+        from_port: 8080
+        to_port: 8080
+        source_vpc: vpc-main
+      - type: egress
+        protocol: -1
+        from_port: 0
+        to_port: 0
+        cidr_blocks: ["0.0.0.0/0"]
+```
+
+## 🐳 Kubernetes Configuration
+
+### Kubernetes Cluster Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Cluster name | `"eks-cluster"` |
+| `provider` | string | Yes | Cloud provider | `"aws_local"` |
+| `vpc` | string | Yes | VPC name | `"vpc-main"` |
+| `spec` | object | Yes | Cluster specification | See below |
+
+### Kubernetes Spec Parameters
+
+| Parameter | Type | Required | Description | AWS | Azure | GCP |
+|-----------|------|----------|-------------|-----|-------|-----|
+| `version` | string | No | K8s version | `"1.28"` | `"1.28"` | `"1.28"` |
+| `node_type` | string | No | Instance type | `"t3.medium"` | - | - |
+| `node_size` | string | No | VM size | - | `"Standard_B2s"` | - |
+| `machine_type` | string | No | Machine type | - | - | `"e2-medium"` |
+| `node_count` | integer | No | Worker nodes | `3` | `3` | `3` |
+| `node_disk_size_gb` | integer | No | Disk size | `50` | - | - |
+
+### Kubernetes Examples
+
+#### EKS Cluster (AWS)
+```yaml
+kubernetes_clusters:
+  - name: eks-cluster
+    provider: aws_local
+    vpc: vpc-main
+    spec:
+      version: "1.28"
+      node_type: "t3.medium"
+      node_count: 3
+      node_disk_size_gb: 50
+```
+
+#### AKS Cluster (Azure)
+```yaml
+kubernetes_clusters:
+  - name: aks-cluster
+    provider: azurerm_local
+    vpc: vnet-main
+    spec:
+      version: "1.28"
+      node_size: "Standard_B2s"
+      node_count: 3
+```
+
+#### GKE Cluster (GCP)
+```yaml
+kubernetes_clusters:
+  - name: gke-cluster
+    provider: google_local
+    vpc: vpc-main
+    spec:
+      version: "1.28"
+      machine_type: "e2-medium"
+      node_count: 3
+```
+
+## 💻 Compute Configuration
+
+### Compute Parameters
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `name` | string | Yes | Instance name | `"web-server"` |
+| `type` | string | Yes | Instance type | `"ec2"` |
+| `provider` | string | Yes | Cloud provider | `"aws_local"` |
+| `vpc` | string | Yes | VPC name | `"vpc-main"` |
+| `subnet` | string | Yes | Subnet name | `"subnet-public"` |
+| `security_group` | string | No | Security group | `"web-sg"` |
+| `spec` | object | Yes | Instance specification | See below |
+
+### Compute Spec Parameters
+
+| Parameter | Type | Required | Description | AWS | Azure | GCP |
+|-----------|------|----------|-------------|-----|-------|-----|
+| `instance_type` | string | No | Instance type | `"t3.micro"` | - | - |
+| `size` | string | No | VM size | - | `"Standard_B1s"` | - |
+| `machine_type` | string | No | Machine type | - | - | `"e2-micro"` |
+| `root_disk_size_gb` | integer | No | Disk size | `20` | `20` | `20` |
+
+### Compute Examples
+
+#### EC2 Instance (AWS)
+```yaml
+computes:
+  - name: web-server
+    type: ec2
+    provider: aws_local
+    vpc: vpc-main
+    subnet: subnet-public
+    security_group: web-sg
+    spec:
+      instance_type: t3.micro
+      root_disk_size_gb: 20
+```
+
+#### Azure VM
+```yaml
+computes:
+  - name: web-server
+    type: azurerm_linux_virtual_machine
+    provider: azurerm_local
+    vpc: vnet-main
+    subnet: subnet-public
+    security_group: nsg-web
+    spec:
+      size: Standard_B1s
+      root_disk_size_gb: 20
+```
+
+#### GCP Instance
+```yaml
+computes:
+  - name: web-server
+    type: google_compute_instance
+    provider: google_local
+    vpc: vpc-main
+    subnet: subnet-public
+    security_group: firewall-web
+    spec:
+      machine_type: e2-micro
+      root_disk_size_gb: 20
+```
+
+## 🌍 Multi-Cloud Examples
+
+### AWS Comprehensive Example
+```yaml
+apiVersion: bolt/v1
+kind: Service
+metadata:
+  name: aws-comprehensive-example
+  owner: yourname
+  tags:
+    environment: "local"
+    project: "bolt-aws-demo"
+    cost-center: "engineering"
+    team: "platform"
+
+providers:
+  - name: aws_local
+    type: aws
+    spec:
+      region: us-east-1
+      environment: local
+
+spec:
+  key_pair:
+    name: "aws-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+  
+  infrastructure:
     networks:
       - name: vpc-main
-        provider: aws_local  # Ganti ke "aws_prod" untuk production
+        provider: aws_local
         cidr: 10.10.0.0/16
         subnets:
-          - name: subnet-public
+          - name: subnet-public-1a
             zone: us-east-1a
             cidr: 10.10.1.0/24
+          - name: subnet-public-1b
+            zone: us-east-1b
+            cidr: 10.10.2.0/24
+          - name: subnet-private-1a
+            zone: us-east-1a
+            cidr: 10.10.3.0/24
+          - name: subnet-private-1b
+            zone: us-east-1b
+            cidr: 10.10.4.0/24
+    
     security_groups:
       - name: web-sg
-        provider: aws_local  # Ganti ke "aws_prod" untuk production
+        provider: aws_local
         vpc: vpc-main
         rules:
           - type: ingress
@@ -94,112 +429,284 @@ spec:
             from_port: 22
             to_port: 22
             cidr_blocks: ["0.0.0.0/0"]
-    computes:
-      - name: web-vm
-        type: ec2
-        provider: aws_local  # Ganti ke "aws_prod" untuk production
+          - type: ingress
+            protocol: tcp
+            from_port: 80
+            to_port: 80
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: ingress
+            protocol: tcp
+            from_port: 443
+            to_port: 443
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+      
+      - name: app-sg
+        provider: aws_local
         vpc: vpc-main
-        subnet: subnet-public
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            source_vpc: vpc-main
+          - type: ingress
+            protocol: tcp
+            from_port: 8080
+            to_port: 8080
+            source_vpc: vpc-main
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+    
+    kubernetes_clusters:
+      - name: eks-cluster
+        provider: aws_local
+        vpc: vpc-main
+        spec:
+          version: "1.28"
+          node_type: "t3.medium"
+          node_count: 3
+          node_disk_size_gb: 50
+    
+    computes:
+      - name: web-server-1
+        type: ec2
+        provider: aws_local
+        vpc: vpc-main
+        subnet: subnet-public-1a
         security_group: web-sg
         spec:
           instance_type: t3.micro
           root_disk_size_gb: 20
+      
+      - name: web-server-2
+        type: ec2
+        provider: aws_local
+        vpc: vpc-main
+        subnet: subnet-public-1b
+        security_group: web-sg
+        spec:
+          instance_type: t3.micro
+          root_disk_size_gb: 20
+      
+      - name: app-server-1
+        type: ec2
+        provider: aws_local
+        vpc: vpc-main
+        subnet: subnet-private-1a
+        security_group: app-sg
+        spec:
+          instance_type: t3.small
+          root_disk_size_gb: 40
+      
+      - name: app-server-2
+        type: ec2
+        provider: aws_local
+        vpc: vpc-main
+        subnet: subnet-private-1b
+        security_group: app-sg
+        spec:
+          instance_type: t3.small
+          root_disk_size_gb: 40
 ```
 
-### 2. **Azure - Minimal, Key Pair Existing, Hanya VM (Local Testing)**
+### Azure Comprehensive Example
 ```yaml
 apiVersion: bolt/v1
 kind: Service
 metadata:
-  name: example-azure-service
+  name: azure-comprehensive-example
   owner: yourname
   tags:
-    environment: "local"  # Ganti ke "production" untuk Azure asli
-    project: "bolt-demo"
+    environment: "local"
+    project: "bolt-azure-demo"
+    cost-center: "engineering"
+    team: "platform"
+
 providers:
-  - name: azure_local  # Ganti ke "azure_prod" untuk production
+  - name: azurerm_local
     type: azurerm
     spec:
       region: eastus
-      environment: local  # Ganti ke "production" untuk Azure asli
-      # Untuk production, login dengan: az login
-      # Atau gunakan service principal: az login --service-principal
+      environment: local
 
 spec:
+  key_pair:
+    name: "azure-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+  
   infrastructure:
-    key_pair:
-      name: "my-existing-key" # SSH public key sudah di-upload manual
     networks:
       - name: vnet-main
-        provider: azure_local  # Ganti ke "azure_prod" untuk production
-        cidr: 10.20.0.0/16
+        provider: azurerm_local
+        cidr: 10.10.0.0/16
         subnets:
-          - name: subnet-main
+          - name: subnet-public-1
             zone: eastus
-            cidr: 10.20.1.0/24
+            cidr: 10.10.1.0/24
+          - name: subnet-public-2
+            zone: eastus2
+            cidr: 10.10.2.0/24
+          - name: subnet-private-1
+            zone: eastus
+            cidr: 10.10.3.0/24
+          - name: subnet-private-2
+            zone: eastus2
+            cidr: 10.10.4.0/24
+    
     security_groups:
-      - name: web-nsg
-        provider: azure_local  # Ganti ke "azure_prod" untuk production
+      - name: nsg-web
+        provider: azurerm_local
         vpc: vnet-main
         rules:
           - type: ingress
-            protocol: Tcp
+            protocol: tcp
             from_port: 22
             to_port: 22
             cidr_blocks: ["0.0.0.0/0"]
-    computes:
-      - name: web-vm
-        type: azurerm_linux_virtual_machine
-        provider: azure_local  # Ganti ke "azure_prod" untuk production
+          - type: ingress
+            protocol: tcp
+            from_port: 80
+            to_port: 80
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: ingress
+            protocol: tcp
+            from_port: 443
+            to_port: 443
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+      
+      - name: nsg-app
+        provider: azurerm_local
         vpc: vnet-main
-        subnet: subnet-main
-        security_group: web-nsg
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            source_vpc: vnet-main
+          - type: ingress
+            protocol: tcp
+            from_port: 8080
+            to_port: 8080
+            source_vpc: vnet-main
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+    
+    kubernetes_clusters:
+      - name: aks-cluster
+        provider: azurerm_local
+        vpc: vnet-main
+        spec:
+          version: "1.28"
+          node_size: "Standard_B2s"
+          node_count: 3
+    
+    computes:
+      - name: web-server-1
+        type: azurerm_linux_virtual_machine
+        provider: azurerm_local
+        vpc: vnet-main
+        subnet: subnet-public-1
+        security_group: nsg-web
         spec:
           size: Standard_B1s
-          username: "azureuser"
-          image:
-            publisher: "Canonical"
-            offer: "0001-com-ubuntu-server-jammy"
-            sku: "22_04-lts-gen2"
-          os_disk_size_gb: 30
+          root_disk_size_gb: 20
+      
+      - name: web-server-2
+        type: azurerm_linux_virtual_machine
+        provider: azurerm_local
+        vpc: vnet-main
+        subnet: subnet-public-2
+        security_group: nsg-web
+        spec:
+          size: Standard_B1s
+          root_disk_size_gb: 20
+      
+      - name: app-server-1
+        type: azurerm_linux_virtual_machine
+        provider: azurerm_local
+        vpc: vnet-main
+        subnet: subnet-private-1
+        security_group: nsg-app
+        spec:
+          size: Standard_B2s
+          root_disk_size_gb: 40
+      
+      - name: app-server-2
+        type: azurerm_linux_virtual_machine
+        provider: azurerm_local
+        vpc: vnet-main
+        subnet: subnet-private-2
+        security_group: nsg-app
+        spec:
+          size: Standard_B2s
+          root_disk_size_gb: 40
 ```
 
-### 3. **GCP - Minimal, Key Pair Existing, Hanya VM (Local Testing)**
+### GCP Comprehensive Example
 ```yaml
 apiVersion: bolt/v1
 kind: Service
 metadata:
-  name: example-gcp-service
+  name: gcp-comprehensive-example
   owner: yourname
   tags:
-    environment: "local"  # Ganti ke "production" untuk GCP asli
-    project: "bolt-demo"
+    environment: "local"
+    project: "bolt-gcp-demo"
+    cost-center: "engineering"
+    team: "platform"
+
 providers:
-  - name: gcp_local  # Ganti ke "gcp_prod" untuk production
+  - name: google_local
     type: google
     spec:
-      project: "your-gcp-project-id"  # Ganti dengan project ID asli untuk production
       region: us-central1
-      environment: local  # Ganti ke "production" untuk GCP asli
-      # Untuk production, set project dan login:
-      # gcloud config set project YOUR_PROJECT_ID
-      # gcloud auth application-default login
+      environment: local
 
 spec:
+  key_pair:
+    name: "gcp-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+  
   infrastructure:
-    key_pair:
-      name: "my-existing-key" # SSH key di metadata project/user
     networks:
       - name: vpc-main
-        provider: gcp_local  # Ganti ke "gcp_prod" untuk production
-        cidr: 10.30.0.0/16
+        provider: google_local
+        cidr: 10.10.0.0/16
         subnets:
-          - name: subnet-main
+          - name: subnet-public-1a
             zone: us-central1-a
-            cidr: 10.30.1.0/24
+            cidr: 10.10.1.0/24
+          - name: subnet-public-1b
+            zone: us-central1-b
+            cidr: 10.10.2.0/24
+          - name: subnet-private-1a
+            zone: us-central1-a
+            cidr: 10.10.3.0/24
+          - name: subnet-private-1b
+            zone: us-central1-b
+            cidr: 10.10.4.0/24
+    
     security_groups:
-      - name: web-fw
-        provider: gcp_local  # Ganti ke "gcp_prod" untuk production
+      - name: firewall-web
+        provider: google_local
         vpc: vpc-main
         rules:
           - type: ingress
@@ -207,214 +714,189 @@ spec:
             from_port: 22
             to_port: 22
             cidr_blocks: ["0.0.0.0/0"]
-    computes:
-      - name: web-vm
-        type: google_compute_instance
-        provider: gcp_local  # Ganti ke "gcp_prod" untuk production
+          - type: ingress
+            protocol: tcp
+            from_port: 80
+            to_port: 80
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: ingress
+            protocol: tcp
+            from_port: 443
+            to_port: 443
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+      
+      - name: firewall-app
+        provider: google_local
         vpc: vpc-main
-        subnet: subnet-main
-        security_group: web-fw
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            source_vpc: vpc-main
+          - type: ingress
+            protocol: tcp
+            from_port: 8080
+            to_port: 8080
+            source_vpc: vpc-main
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+    
+    kubernetes_clusters:
+      - name: gke-cluster
+        provider: google_local
+        vpc: vpc-main
         spec:
-          machine_type: e2-medium
-          zone: us-central1-a
-          image: "debian-cloud/debian-11"
-          disk_size_gb: 20
+          version: "1.28"
+          machine_type: "e2-medium"
+          node_count: 3
+    
+    computes:
+      - name: web-server-1
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-public-1a
+        security_group: firewall-web
+        spec:
+          machine_type: e2-micro
+          root_disk_size_gb: 20
+      
+      - name: web-server-2
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-public-1b
+        security_group: firewall-web
+        spec:
+          machine_type: e2-micro
+          root_disk_size_gb: 20
+      
+      - name: app-server-1
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-private-1a
+        security_group: firewall-app
+        spec:
+          machine_type: e2-small
+          root_disk_size_gb: 40
+      
+      - name: app-server-2
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-private-1b
+        security_group: firewall-app
+        spec:
+          machine_type: e2-small
+          root_disk_size_gb: 40
 ```
 
-### 4. **Fleksibilitas YAML**
-- Bisa hanya 1 VM, atau full stack (multi VPC, multi subnet, multi SG, cluster, dsb)
-- Bisa pakai key pair yang sudah ada (cukup isi `name` saja)
-- Semua resource opsional, hanya isi yang dibutuhkan
-- Bisa multi-provider dalam satu file
+## 🔄 Environment Switching
 
-### 5. **Local vs Production**
-- **Local Testing**: Gunakan `environment: local` dan provider name dengan suffix `_local`
-- **Production**: Ganti ke `environment: production` dan provider name dengan suffix `_prod`
-- **AWS Local**: Menggunakan LocalStack (tidak ada biaya)
-- **Azure/GCP Local**: Tetap menggunakan cloud dev/test (ada biaya minimal)
+### Local Development
+```yaml
+providers:
+  - name: aws_local
+    type: aws
+    spec:
+      region: us-east-1
+      environment: local
+```
 
-## 🏗️ Bootstrap & Destroy Infrastructure
+### Production
+```yaml
+providers:
+  - name: aws
+    type: aws
+    spec:
+      region: us-east-1
+      environment: production
+```
+
+## 📊 Analysis Features
+
+### Dependency Graph
+```bash
+./bold analyze service.yaml
+```
+
+Shows:
+- Resource dependency tree
+- Mermaid diagram
+- DOT graph for Graphviz
+- Cost estimation
+
+### Cost Estimation
+- Monthly and hourly cost estimates
+- Breakdown by resource type
+- Local environment detection (free)
+- Cost optimization tips
+
+## 🛠️ Commands
 
 ```bash
-# Bootstrap infrastruktur
-./bolt bootstrap service.yaml
+# Analyze infrastructure
+./bold analyze <service.yaml>
 
-# Atau untuk Azure
-./bolt bootstrap service-azure.yaml
-
-# Atau untuk GCP
-./bolt bootstrap service-gcp.yaml
+# Bootstrap infrastructure
+./bold bootstrap <service.yaml>
 
 # Destroy infrastructure
-./bolt destroy service.yaml
+./bold destroy <service.yaml>
 ```
 
-## 🔧 Konfigurasi Production
+## 🔧 Development
 
-### AWS Production Setup
-
-1. **Set Environment Variables**:
-```bash
-export AWS_ACCESS_KEY_ID="your-access-key"
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_DEFAULT_REGION="us-east-1"
-```
-
-2. **Update Service YAML**:
-```yaml
-providers:
-  - name: "aws_prod"
-    type: "aws"
-    spec:
-      region: "us-east-1"
-      environment: "production"  # Penting!
-```
-
-### Azure Production Setup
-
-1. **Login dengan Service Principal**:
-```bash
-az login --service-principal \
-  --username APP_ID \
-  --password PASSWORD \
-  --tenant TENANT_ID
-```
-
-2. **Update Service YAML**:
-```yaml
-providers:
-  - name: azure_prod
-    type: azurerm
-    spec:
-      region: "eastus"
-      environment: "production"
-```
-
-### GCP Production Setup
-
-1. **Set Project dan Authenticate**:
-```bash
-gcloud config set project YOUR_PROJECT_ID
-gcloud auth application-default login
-```
-
-2. **Update Service YAML**:
-```yaml
-providers:
-  - name: gcp_prod
-    type: google
-    spec:
-      project: "your-actual-project-id"
-      region: "us-central1"
-      environment: "production"
-```
-
-## 🧪 Testing Lokal
-
-### AWS (LocalStack)
-```bash
-localstack start
-./bolt bootstrap service.yaml
-```
-
-### Azure (Dev/Test Subscription)
-```bash
-az login
-./bolt bootstrap service-azure.yaml
-```
-
-### GCP (Project Dev/Test)
-```bash
-gcloud auth application-default login
-./bolt bootstrap service-gcp.yaml
-```
-
-**Catatan:**
-- Untuk AWS, resource akan dibuat di LocalStack (tidak ke AWS asli).
-- Untuk Azure & GCP, resource tetap dibuat di cloud dev/test, gunakan subscription/project khusus testing.
-- Untuk production, cukup ganti `environment: production` dan credential ke yang production.
-
-## 🚦 Migrasi ke Production
-1. **AWS Production**:
-   ```bash
-   # Set credentials
-   export AWS_ACCESS_KEY_ID="your-access-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret-key"
-   
-   # Update YAML: ganti semua "aws_local" ke "aws_prod"
-   # Update YAML: ganti "environment: local" ke "environment: production"
-   ```
-
-2. **Azure Production**:
-   ```bash
-   # Login
-   az login
-   
-   # Update YAML: ganti semua "azure_local" ke "azure_prod"
-   # Update YAML: ganti "environment: local" ke "environment: production"
-   ```
-
-3. **GCP Production**:
-   ```bash
-   # Set project dan login
-   gcloud config set project YOUR_PROJECT_ID
-   gcloud auth application-default login
-   
-   # Update YAML: ganti semua "gcp_local" ke "gcp_prod"
-   # Update YAML: ganti "environment: local" ke "environment: production"
-   ```
-
-## ⚠️ Troubleshooting & Tips
-- **Resource tidak muncul di cloud?**
-  - Pastikan provider, credential, dan region sudah benar.
-- **Error permission?**
-  - Cek credential dan role IAM/Service Principal/Service Account.
-- **LocalStack error?**
-  - Pastikan LocalStack sudah running dan environment di YAML `local`.
-- **Resource tidak didukung di local?**
-  - Beberapa resource (EKS/AKS/GKE) hanya bisa dites di cloud dev/test.
-- **Security group terlalu permisif?**
-  - Perketat rule sebelum ke production.
-
-## 🏗️ Arsitektur
-
-```
-Bolt CLI
-├── Parser (YAML → Go Structs)
-├── Compiler (Go Structs → OpenTofu JSON)
-└── Engine (OpenTofu Commands)
-    ├── AWS Provider
-    ├── Azure Provider
-    └── GCP Provider
-```
-
-## 📁 Struktur File
-
+### Project Structure
 ```
 bold/
-├── main.go                 # CLI entry point
-├── cmd/
-│   ├── bootstrap.go        # Bootstrap command
-│   └── destroy.go          # Destroy command
-├── pkg/
-│   ├── parser/             # YAML parsing
-│   ├── compiler/           # OpenTofu compilation
-│   ├── engine/             # OpenTofu execution
-│   └── workflow/           # Workflow orchestration
-├── service.yaml            # AWS example
-├── service-azure.yaml      # Azure example
-├── service-gcp.yaml        # GCP example
+├── cmd/           # CLI commands
+├── pkg/           # Core packages
+│   ├── compiler/  # OpenTofu code generation
+│   ├── config/    # Configuration management
+│   ├── cost/      # Cost estimation
+│   ├── engine/    # Deployment engine
+│   ├── errors/    # Error handling
+│   ├── graph/     # Dependency graph
+│   ├── logger/    # Logging
+│   ├── parser/    # YAML parsing
+│   └── workflow/  # Workflow management
+├── service.yaml   # Example configuration
 └── README.md
 ```
 
-## 🤝 Contributing
+### Building
+```bash
+go build -o bold .
+```
 
-1. Fork repository
-2. Create feature branch
-3. Make changes
-4. Add tests
-5. Submit pull request
+### Testing
+```bash
+go test ./...
+```
 
 ## 📄 License
 
-MIT License 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📞 Support
+
+For support and questions, please open an issue on GitHub. 

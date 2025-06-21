@@ -31,6 +31,7 @@ type Provider struct {
 type KeyPair struct {
 	Name          string `yaml:"name"`
 	PublicKeyFile string `yaml:"public_key_file"`
+	UseExisting   bool   `yaml:"use_existing"`
 }
 
 type Infrastructure struct {

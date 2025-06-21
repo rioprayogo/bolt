@@ -1,35 +1,49 @@
 apiVersion: bolt/v1
 kind: Service
 metadata:
-  name: example-gcp-service
+  name: gcp-comprehensive-example
   owner: yourname
   tags:
     environment: "local"
-    project: "bolt-demo"
+    project: "bolt-gcp-demo"
+    cost-center: "engineering"
+    team: "platform"
+
 providers:
-  - name: gcp_local
+  - name: google_local
     type: google
     spec:
-      project: "your-gcp-project-id"
       region: us-central1
       environment: local
 
 spec:
+  key_pair:
+    name: "gcp-key"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    use_existing: true
+  
   infrastructure:
-    # Gunakan key pair yang sudah ada (GCP: SSH key di metadata project/user)
-    key_pair:
-      name: "my-existing-key"
     networks:
       - name: vpc-main
-        provider: gcp_local
-        cidr: 10.30.0.0/16
+        provider: google_local
+        cidr: 10.10.0.0/16
         subnets:
-          - name: subnet-main
+          - name: subnet-public-1a
             zone: us-central1-a
-            cidr: 10.30.1.0/24
+            cidr: 10.10.1.0/24
+          - name: subnet-public-1b
+            zone: us-central1-b
+            cidr: 10.10.2.0/24
+          - name: subnet-private-1a
+            zone: us-central1-a
+            cidr: 10.10.3.0/24
+          - name: subnet-private-1b
+            zone: us-central1-b
+            cidr: 10.10.4.0/24
+    
     security_groups:
-      - name: web-fw
-        provider: gcp_local
+      - name: firewall-web
+        provider: google_local
         vpc: vpc-main
         rules:
           - type: ingress
@@ -37,15 +51,88 @@ spec:
             from_port: 22
             to_port: 22
             cidr_blocks: ["0.0.0.0/0"]
-    computes:
-      - name: web-vm
-        type: google_compute_instance
-        provider: gcp_local
+          - type: ingress
+            protocol: tcp
+            from_port: 80
+            to_port: 80
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: ingress
+            protocol: tcp
+            from_port: 443
+            to_port: 443
+            cidr_blocks: ["0.0.0.0/0"]
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+      
+      - name: firewall-app
+        provider: google_local
         vpc: vpc-main
-        subnet: subnet-main
-        security_group: web-fw
+        rules:
+          - type: ingress
+            protocol: tcp
+            from_port: 22
+            to_port: 22
+            source_vpc: vpc-main
+          - type: ingress
+            protocol: tcp
+            from_port: 8080
+            to_port: 8080
+            source_vpc: vpc-main
+          - type: egress
+            protocol: -1
+            from_port: 0
+            to_port: 0
+            cidr_blocks: ["0.0.0.0/0"]
+    
+    kubernetes_clusters:
+      - name: gke-cluster
+        provider: google_local
+        vpc: vpc-main
         spec:
-          machine_type: e2-medium
-          zone: us-central1-a
-          image: "debian-cloud/debian-11"
-          disk_size_gb: 20 
+          version: "1.28"
+          machine_type: "e2-medium"
+          node_count: 3
+    
+    computes:
+      - name: web-server-1
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-public-1a
+        security_group: firewall-web
+        spec:
+          machine_type: e2-micro
+          root_disk_size_gb: 20
+      
+      - name: web-server-2
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-public-1b
+        security_group: firewall-web
+        spec:
+          machine_type: e2-micro
+          root_disk_size_gb: 20
+      
+      - name: app-server-1
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-private-1a
+        security_group: firewall-app
+        spec:
+          machine_type: e2-small
+          root_disk_size_gb: 40
+      
+      - name: app-server-2
+        type: google_compute_instance
+        provider: google_local
+        vpc: vpc-main
+        subnet: subnet-private-1b
+        security_group: firewall-app
+        spec:
+          machine_type: e2-small
+          root_disk_size_gb: 40 

@@ -201,6 +201,9 @@ func setDefaults(config *Config) {
 	if config.Security.TimeoutSeconds == 0 {
 		config.Security.TimeoutSeconds = 300
 	}
+	if !config.Security.RequireConfirmation {
+		config.Security.RequireConfirmation = true
+	}
 }
 
 // GetProviderConfig returns provider-specific configuration
