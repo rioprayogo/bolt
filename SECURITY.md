@@ -14,7 +14,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 ### 🔒 **Responsible Disclosure**
 
 1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. **DO** email us at: `security@bolt-infra.com` (or create private issue)
+2. **DO** create a private GitHub issue for vulnerability disclosure
 3. **Include** detailed information about the vulnerability
 4. **Provide** steps to reproduce the issue
 
