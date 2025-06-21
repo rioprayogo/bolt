@@ -40,10 +40,13 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+diagram.md
+graph.dot
 
 # Local configuration overrides
 .env
 .env.local
+config.yaml
 
 # Terraform/OpenTofu files
 *.tfstate

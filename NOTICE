@@ -1,0 +1,10 @@
+Bolt Infrastructure Tool
+Copyright 2024 Bolt Infrastructure Tool
+
+This product includes software developed by:
+- OpenTofu (https://opentofu.org/)
+- HashiCorp (https://www.hashicorp.com/)
+- The Go Authors (https://golang.org/)
+
+This product may include third-party dependencies with their own licenses.
+Please refer to individual dependency licenses for more information. 

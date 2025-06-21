@@ -887,7 +887,25 @@ go test ./...
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
+
+### Why Apache License 2.0?
+
+- **Patent Protection**: Provides explicit patent protection for contributors and users
+- **Corporate Friendly**: Widely adopted by major companies (Google, Microsoft, AWS)
+- **Strong Legal Foundation**: Comprehensive legal framework for commercial use
+- **Contribution Clarity**: Clear terms for contributions and derivative works
+- **Trademark Protection**: Protects project trademarks and branding
+
+### Key Benefits:
+
+✅ **Commercial Use**: Free for commercial and enterprise use  
+✅ **Patent Protection**: Automatic patent license from contributors  
+✅ **Modification Rights**: Can modify and distribute freely  
+✅ **Attribution Required**: Must include license and copyright notices  
+✅ **Trademark Protection**: Protects "Bolt" branding  
+
+For more information, see [Apache License 2.0 FAQ](https://www.apache.org/foundation/license-faq.html).
 
 ## 🤝 Contributing
 
