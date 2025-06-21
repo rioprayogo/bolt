@@ -1,5 +1,12 @@
 # 🚀 Bolt - Multi-Cloud Infrastructure as Code
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/rioprayogo/bolt)](https://golang.org)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rioprayogo/bolt)](https://goreportcard.com/report/github.com/rioprayogo/bolt)
+[![Release](https://img.shields.io/github/v/release/rioprayogo/bolt)](https://github.com/rioprayogo/bolt/releases)
+[![Stars](https://img.shields.io/github/stars/rioprayogo/bolt)](https://github.com/rioprayogo/bolt/stargazers)
+[![Contributors](https://img.shields.io/github/contributors/rioprayogo/bolt)](https://github.com/rioprayogo/bolt/graphs/contributors)
+
 Bolt is a powerful Infrastructure as Code (IaC) tool that supports AWS, Azure, and GCP with a simple YAML configuration. Built with Go and OpenTofu, it provides a unified interface for managing multi-cloud infrastructure including Kubernetes clusters.
 
 ## ✨ Features
@@ -842,6 +849,12 @@ Shows:
 - Local environment detection (free)
 - Cost optimization tips
 
+## 📚 Documentation
+
+- **[🏗️ Architecture](docs/architecture.md)** - Technical architecture and design
+- **[📊 Comparison](docs/comparison.md)** - Bolt vs other IaC tools
+- **[🔧 Development](docs/development.md)** - Contributing and development guide
+
 ## 🛠️ Commands
 
 ```bash
@@ -917,4 +930,12 @@ For more information, see [Apache License 2.0 FAQ](https://www.apache.org/founda
 
 ## 📞 Support
 
-For support and questions, please open an issue on GitHub. 
+For support and questions, please open an issue on GitHub.
+
+## 🚀 What's Next?
+
+We're actively working on new features to make Bolt even better!
+Stay tuned for updates by:
+- ⭐ Starring this repository
+- 👀 Watching for releases
+- 💬 Joining discussions 
